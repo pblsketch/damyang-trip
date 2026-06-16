@@ -114,6 +114,7 @@
   .note{font-size:15.5px; color:var(--sub); background:#f0f5ed; border-left:4px solid var(--leaf);
     padding:10px 14px; border-radius:8px; margin:10px 0;}
 </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 </head>
 <body>
 
@@ -144,6 +145,7 @@
     <a href="#food">🍽️ 식당</a>
     <a href="#cafe">☕ 카페</a>
     <a href="#course">🗓️ 추천 코스</a>
+    <a href="#routemap">🗺️ 동선 지도</a>
     <a href="#tip">📌 준비물</a>
   </div>
 </nav>
@@ -523,6 +525,39 @@
     </div>
   </section>
 
+  <!-- ===== ROUTE MAP ===== -->
+  <style>
+    #map{height:470px; border-radius:18px; border:1px solid var(--line); box-shadow:var(--soft); margin-top:4px;}
+    .daybtns{display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 12px;}
+    .dbtn{flex:0 0 auto; background:#fff; border:1px solid var(--line); color:var(--green-d);
+      font-weight:700; padding:9px 16px; border-radius:999px; font-size:16px; cursor:pointer;}
+    .dbtn.on{background:var(--green); color:#fff; border-color:var(--green);}
+    .mlegend{margin-top:14px; display:flex; flex-direction:column; gap:10px; font-size:15.5px; color:var(--ink);}
+    .mlegend .li{display:flex; gap:9px; align-items:flex-start; background:#fff; border:1px solid var(--line);
+      border-radius:14px; padding:11px 13px; box-shadow:var(--soft);}
+    .mlegend .dot{flex:0 0 auto; width:14px; height:14px; border-radius:50%; margin-top:4px;}
+    .mlegend .seq{color:var(--sub); font-size:15px; line-height:1.6;}
+    .leafnum{display:flex;align-items:center;justify-content:center;width:27px;height:27px;
+      border-radius:50%;color:#fff;font-weight:800;font-size:13.5px;border:2px solid #fff;
+      box-shadow:0 1px 5px rgba(0,0,0,.45);}
+    .mapnote{color:var(--sub); font-size:15px; margin:10px 0 0;}
+  </style>
+  <section id="routemap" class="anchor">
+    <h2>🗺️ 이번 여행 이동 동선</h2>
+    <p class="lead">1·2·3일차 동선을 지도에 그렸어요. 아래 버튼으로 날짜별 경로만 골라 볼 수 있어요.
+    번호를 누르면 장소 이름이 떠요.</p>
+    <div class="daybtns">
+      <button class="dbtn on" data-day="1">1일차</button>
+      <button class="dbtn" data-day="2">2일차</button>
+      <button class="dbtn" data-day="3">3일차</button>
+      <button class="dbtn" data-day="all">전체 보기</button>
+    </div>
+    <div id="map"></div>
+    <div id="maplegend" class="mlegend"></div>
+    <p class="mapnote">※ 선은 이동 <b>순서</b>를 잇는 안내선이라 실제 도로와는 달라요. 정확한 위치는 각 장소 카드의 지도를 참고하세요.
+    (전통식당·숙소·애견카페는 위치 근사치)</p>
+  </section>
+
   <!-- ===== TIPS ===== -->
   <section id="tip" class="anchor">
     <h2>📌 알아두면 좋은 정보</h2>
@@ -546,5 +581,82 @@
   <p class="src">사진: 위키미디어 공용(담양 명소) · 지도: Google Maps · 강아지 동반정보: 현지 방문 후기 기준(방문 전 확인 권장)</p>
 </footer>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  if(!window.L){return;}
+  var colors={1:'#2e6b3a',2:'#d98a2b',3:'#2b6fb0'};
+  var dayName={1:'1일차 · 이동 &amp; 가사문학권',2:'2일차 · 담양 시내',3:'3일차 · 마무리·귀가'};
+  var stops={
+    1:[
+      {n:'출',name:'아산 출발',ll:[36.7883,127.0019]},
+      {n:1,name:'예산 (장인·장모님 픽업)',ll:[36.6809,126.8451]},
+      {n:2,name:'전통식당 (고서면·점심)',ll:[35.2700,126.9720]},
+      {n:3,name:'소쇄원',ll:[35.1833,127.0075]},
+      {n:4,name:'광주호 호수생태원',ll:[35.2000,127.0030]},
+      {n:5,name:'숙소 체크인 (담양읍)',ll:[35.3182,126.9824]}
+    ],
+    2:[
+      {n:1,name:'관방제림 (천변 산책)',ll:[35.3247,126.9875]},
+      {n:2,name:'국수거리 (점심)',ll:[35.3243,126.9862]},
+      {n:3,name:'메타세쿼이아 가로수길',ll:[35.3150,127.0040]},
+      {n:4,name:'메타프로방스',ll:[35.3219,127.0019]}
+    ],
+    3:[
+      {n:1,name:'애견카페 개신나',ll:[35.3350,126.9850]},
+      {n:2,name:'귀가 (북쪽으로)',ll:[35.3182,126.9824]}
+    ]
+  };
+  var seqText={
+    1:'아산 → 예산(픽업) → 전통식당 점심 → 소쇄원 → 광주호 호수생태원 → 숙소',
+    2:'관방제림 → 국수거리 점심 → (펜션 휴식) → 메타세쿼이아길 → 메타프로방스',
+    3:'애견카페 개신나 → 귀가'
+  };
+  var map=L.map('map',{scrollWheelZoom:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+  var layers={};
+  function numIcon(num,color){
+    return L.divIcon({className:'',html:'<div class="leafnum" style="background:'+color+'">'+num+'</div>',
+      iconSize:[27,27], iconAnchor:[13,13]});
+  }
+  Object.keys(stops).forEach(function(d){
+    var g=L.layerGroup(); var pts=[];
+    stops[d].forEach(function(s){
+      pts.push(s.ll);
+      L.marker(s.ll,{icon:numIcon(s.n,colors[d])}).bindPopup('<b>'+dayName[d]+'</b><br>'+s.n+'. '+s.name).addTo(g);
+    });
+    L.polyline(pts,{color:colors[d],weight:4,opacity:.85}).addTo(g);
+    layers[d]=g;
+  });
+  function boundsOf(ds){
+    var all=[];
+    ds.forEach(function(d){ stops[d].forEach(function(s){all.push(s.ll);}); });
+    return L.latLngBounds(all);
+  }
+  function show(day){
+    Object.keys(layers).forEach(function(k){ if(map.hasLayer(layers[k])) map.removeLayer(layers[k]); });
+    var ds = (day==='all')?['1','2','3']:[day];
+    ds.forEach(function(d){ layers[d].addTo(map); });
+    map.fitBounds(boundsOf(ds),{padding:[35,35]});
+    var html='';
+    ds.forEach(function(d){
+      html+='<div class="li"><span class="dot" style="background:'+colors[d]+'"></span>'
+        +'<span><b>'+dayName[d]+'</b><br><span class="seq">'+seqText[d]+'</span></span></div>';
+    });
+    document.getElementById('maplegend').innerHTML=html;
+  }
+  var btns=document.querySelectorAll('.dbtn');
+  btns.forEach(function(b){
+    b.addEventListener('click',function(){
+      btns.forEach(function(x){x.classList.remove('on');});
+      b.classList.add('on');
+      show(b.getAttribute('data-day'));
+    });
+  });
+  show('1');
+  setTimeout(function(){map.invalidateSize();map.fitBounds(boundsOf(['1']),{padding:[35,35]});},250);
+})();
+</script>
 </body>
 </html>
